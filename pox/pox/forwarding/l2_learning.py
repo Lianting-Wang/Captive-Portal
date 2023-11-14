@@ -91,12 +91,37 @@ class LearningSwitch (object):
     #log.debug("Initializing LearningSwitch, transparent=%s",
     #          str(self.transparent))
 
+  def redirect_to_captive_portal(self, packet, event, port):
+    msg = of.ofp_flow_mod()
+    msg.match = of.ofp_match.from_packet(packet, event.port)
+    msg.priority = 0xffff
+    msg.actions.append(of.ofp_action_output(port = port))
+    self.connection.send(msg)
+
+  def is_new_device(self, source_mac, captive_portal_mac):
+    if captive_portal_mac not in self.macToPort:
+      log.warning("Captive Portal MAC is unknown, can't redirect.")
+      return False
+    if source_mac != captive_portal_mac:
+      return True
+    return False
+
   def _handle_PacketIn (self, event):
     """
     Handle packet in messages from the switch to implement above algorithm.
     """
 
     packet = event.parsed
+
+    captive_portal_mac = '9e:f8:bf:b1:91:14'
+
+    if packet.src == captive_portal_mac:
+      self.macToPort[captive_portal_mac] = event.port
+
+    if self.is_new_device(packet.src, captive_portal_mac):
+      captive_portal_port = self.macToPort[captive_portal_mac]
+      self.redirect_to_captive_portal(packet, event, captive_portal_port)
+      return
 
     def flood (message = None):
       """ Floods the packet """
