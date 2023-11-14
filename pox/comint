@@ -1,0 +1,5 @@
+wifi@wifi-virtualbox:~/mininet-wifi/pox$ sudo ./pox.py log.level --DEBUG forwarding.l2_learning_new
+
+sudo ./pox.py log.level --DEBUG forwarding.l2_learning_new
+
+sudo mn --topo tree,2,2 --controller remote
