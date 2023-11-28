@@ -19,11 +19,13 @@ It is derived from one written live for an SDN crash course.
 It is somwhat similar to NOX's pyswitch in that it installs
 exact-match rules for each flow.
 """
-
+import json
+import socket
 from pox.core import core
 import pox.openflow.libopenflow_01 as of
 from pox.lib.util import dpid_to_str, str_to_dpid
 from pox.lib.util import str_to_bool
+from pox.lib.addresses import EthAddr
 import time
 
 log = core.getLogger()
@@ -31,6 +33,35 @@ log = core.getLogger()
 # We don't want to flood immediately when a switch connects.
 # Can be overriden on commandline.
 _flood_delay = 0
+
+class TCPClient:
+  def __init__(self, host='127.0.0.1', port=65432):
+    """Create a TCP client that can send and receive messages from a persistent connection."""
+    self.host = host
+    self.port = port
+    self.connection = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    self.connection.connect((host, port))
+
+  def send_request(self, request):
+    """Send a JSON request to the server and return the JSON response."""
+    self.connection.sendall(json.dumps(request).encode())
+    return json.loads(self.connection.recv(1024).decode())
+
+  def get_host(self):
+      """Request the MAC address from the server."""
+      return self.send_request({'command': 'getHost'})
+
+  def set_host(self, value):
+    """Request the MAC address from the server."""
+    return self.send_request({'command': 'setHost', 'value': value})
+
+  def check_valid(self, value):
+    """Request wether the MAC address is valid or not."""
+    return self.send_request({'command': 'check', 'value': value})
+
+  def close_connection(self):
+    """Close the connection to the server."""
+    self.connection.close()
 
 class LearningSwitch (object):
   """
@@ -88,6 +119,10 @@ class LearningSwitch (object):
     # We just use this to know when to log a helpful message
     self.hold_down_expired = _flood_delay == 0
 
+    # Creating a TCP Client Instance
+    self.tcp_client = TCPClient()
+    self.captive_portal_mac = EthAddr(self.tcp_client.get_host()['result'])
+
     #log.debug("Initializing LearningSwitch, transparent=%s",
     #          str(self.transparent))
 
@@ -98,13 +133,13 @@ class LearningSwitch (object):
     msg.actions.append(of.ofp_action_output(port = port))
     self.connection.send(msg)
 
-  def is_new_device(self, source_mac, captive_portal_mac):
-    if captive_portal_mac not in self.macToPort:
+  def is_new_device(self, source_mac):
+    if self.captive_portal_mac not in self.macToPort:
       log.warning("Captive Portal MAC is unknown, can't redirect.")
-      return False
-    if source_mac != captive_portal_mac:
       return True
-    return False
+    if source_mac != self.captive_portal_mac:
+      return True
+    return self.tcp_client.check_valid(str(source_mac))['result']
 
   def _handle_PacketIn (self, event):
     """
@@ -113,13 +148,15 @@ class LearningSwitch (object):
 
     packet = event.parsed
 
-    captive_portal_mac = '9e:f8:bf:b1:91:14'
+    response = EthAddr(self.tcp_client.get_host()['result'])
+    if response and self.captive_portal_mac != response:
+      self.captive_portal_mac = response
 
-    if packet.src == captive_portal_mac:
-      self.macToPort[captive_portal_mac] = event.port
+    if packet.src == self.captive_portal_mac:
+      self.macToPort[self.captive_portal_mac] = event.port
 
-    if self.is_new_device(packet.src, captive_portal_mac):
-      captive_portal_port = self.macToPort[captive_portal_mac]
+    if self.is_new_device(packet.src):
+      captive_portal_port = self.macToPort[self.captive_portal_mac]
       self.redirect_to_captive_portal(packet, event, captive_portal_port)
       return
 
