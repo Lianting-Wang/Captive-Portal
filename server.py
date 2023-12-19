@@ -32,10 +32,11 @@ class MACSet:
             return False
 
 class Server:
-    def __init__(self, MAC='00:00:00:00:00:00', host='127.0.0.1', port=65432):
+    def __init__(self, hMAC='00:00:00:00:00:01', iMAC='00:00:00:00:00:02', host='127.0.0.1', port=65432):
         self.host = host
         self.port = port
-        self.MAC = MAC
+        self.hMAC = hMAC
+        self.iMAC = iMAC
         self.MACSet = MACSet()
         self.server_socket = None
         self.lock = threading.Lock()
@@ -72,11 +73,20 @@ class Server:
     
     def get_host(self):
         with self.lock:
-          return {'result': self.MAC}
+          return {'result': self.hMAC}
     
     def set_host(self, value):
         with self.lock:
-          self.MAC = value
+          self.hMAC = value
+          return {'result': True}
+    
+    def get_internet(self):
+        with self.lock:
+          return {'result': self.iMAC}
+    
+    def set_internet(self, value):
+        with self.lock:
+          self.iMAC = value
           return {'result': True}
     
     def add_mac(self, value):
@@ -95,6 +105,10 @@ class Server:
             response = self.get_host()
         elif command == 'setHost':
             response = self.set_host(request.get('value'))
+        elif command == 'getInternet':
+            response = self.get_internet()
+        elif command == 'setInternet':
+            response = self.set_internet(request.get('value'))
         elif command == 'add':
             response = self.add_mac(request.get('value'))
         elif command == 'check':

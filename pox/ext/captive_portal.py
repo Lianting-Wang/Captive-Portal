@@ -19,11 +19,13 @@ It is derived from one written live for an SDN crash course.
 It is somwhat similar to NOX's pyswitch in that it installs
 exact-match rules for each flow.
 """
-
+import json
+import socket
 from pox.core import core
 import pox.openflow.libopenflow_01 as of
 from pox.lib.util import dpid_to_str, str_to_dpid
 from pox.lib.util import str_to_bool
+from pox.lib.addresses import EthAddr
 import time
 
 log = core.getLogger()
@@ -31,6 +33,43 @@ log = core.getLogger()
 # We don't want to flood immediately when a switch connects.
 # Can be overriden on commandline.
 _flood_delay = 0
+
+class TCPClient:
+  def __init__(self, host='127.0.0.1', port=65432):
+    """Create a TCP client that can send and receive messages from a persistent connection."""
+    self.host = host
+    self.port = port
+    self.connection = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    self.connection.connect((host, port))
+
+  def send_request(self, request):
+    """Send a JSON request to the server and return the JSON response."""
+    self.connection.sendall(json.dumps(request).encode())
+    return json.loads(self.connection.recv(1024).decode())
+
+  def get_host(self):
+      """Request the MAC address from the server."""
+      return self.send_request({'command': 'getHost'})
+
+  def set_host(self, value):
+    """Request the MAC address from the server."""
+    return self.send_request({'command': 'setHost', 'value': value})
+  
+  def get_internet(self):
+      """Request the MAC address from the server."""
+      return self.send_request({'command': 'getInternet'})
+
+  def set_internet(self, value):
+    """Request the MAC address from the server."""
+    return self.send_request({'command': 'setInternet', 'value': value})
+
+  def check_valid(self, value):
+    """Request wether the MAC address is valid or not."""
+    return self.send_request({'command': 'check', 'value': value})
+
+  def close_connection(self):
+    """Close the connection to the server."""
+    self.connection.close()
 
 class LearningSwitch (object):
   """
@@ -88,6 +127,11 @@ class LearningSwitch (object):
     # We just use this to know when to log a helpful message
     self.hold_down_expired = _flood_delay == 0
 
+    # Creating a TCP Client Instance
+    self.tcp_client = TCPClient()
+    self.captive_portal_mac = EthAddr(self.tcp_client.get_host()['result'])
+    self.internet_mac = EthAddr(self.tcp_client.get_internet()['result'])
+
     #log.debug("Initializing LearningSwitch, transparent=%s",
     #          str(self.transparent))
 
@@ -97,6 +141,10 @@ class LearningSwitch (object):
     """
 
     packet = event.parsed
+
+    response = EthAddr(self.tcp_client.get_host()['result'])
+    if response and self.captive_portal_mac != response:
+      self.captive_portal_mac = response
 
     def flood (message = None):
       """ Floods the packet """
@@ -142,6 +190,17 @@ class LearningSwitch (object):
         msg.in_port = event.port
         self.connection.send(msg)
 
+    def direct_to_port(packet, event, port):
+      # log.debug("installing flow for %s.%i -> %s.%i" %
+      #           (packet.src, event.port, packet.dst, port))
+      msg = of.ofp_flow_mod()
+      msg.match = of.ofp_match.from_packet(packet, event.port)
+      msg.idle_timeout = 10
+      msg.hard_timeout = 30
+      msg.actions.append(of.ofp_action_output(port = port))
+      msg.data = event.ofp # 6a
+      self.connection.send(msg)
+
     self.macToPort[packet.src] = event.port # 1
 
     if not self.transparent: # 2
@@ -163,16 +222,23 @@ class LearningSwitch (object):
           drop(10)
           return
         # 6
-        log.debug("installing flow for %s.%i -> %s.%i" %
-                  (packet.src, event.port, packet.dst, port))
-        msg = of.ofp_flow_mod()
-        msg.match = of.ofp_match.from_packet(packet, event.port)
-        msg.idle_timeout = 10
-        msg.hard_timeout = 30
-        msg.actions.append(of.ofp_action_output(port = port))
-        msg.data = event.ofp # 6a
-        self.connection.send(msg)
-
+        if packet.src == self.captive_portal_mac:
+          if self.tcp_client.check_valid(str(packet.dst))['result']:
+            drop()
+          else:
+            direct_to_port(packet, event, port)
+        elif packet.src == self.internet_mac:
+          if not self.tcp_client.check_valid(str(packet.dst))['result']:
+            drop()
+          else:
+            direct_to_port(packet, event, port)
+        else:
+          if self.tcp_client.check_valid(str(packet.src))['result']:
+            internet_mac = self.macToPort[self.internet_mac]
+            direct_to_port(packet, event, internet_mac)
+          else:
+            captive_portal_port = self.macToPort[self.captive_portal_mac]
+            direct_to_port(packet, event, captive_portal_port)
 
 class l2_learning (object):
   """
