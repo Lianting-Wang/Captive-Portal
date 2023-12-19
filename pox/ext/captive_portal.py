@@ -135,6 +135,9 @@ class LearningSwitch (object):
     #log.debug("Initializing LearningSwitch, transparent=%s",
     #          str(self.transparent))
 
+  def check_valid(self, source_mac):
+    return self.tcp_client.check_valid(str(source_mac))['result']
+
   def _handle_PacketIn (self, event):
     """
     Handle packet in messages from the switch to implement above algorithm.
@@ -223,17 +226,17 @@ class LearningSwitch (object):
           return
         # 6
         if packet.src == self.captive_portal_mac:
-          if self.tcp_client.check_valid(str(packet.dst))['result']:
+          if self.check_valid(packet.dst):
             drop()
           else:
             direct_to_port(packet, event, port)
         elif packet.src == self.internet_mac:
-          if not self.tcp_client.check_valid(str(packet.dst))['result']:
+          if not self.check_valid(packet.dst):
             drop()
           else:
             direct_to_port(packet, event, port)
         else:
-          if self.tcp_client.check_valid(str(packet.src))['result']:
+          if self.check_valid(packet.src):
             internet_mac = self.macToPort[self.internet_mac]
             direct_to_port(packet, event, internet_mac)
           else:
