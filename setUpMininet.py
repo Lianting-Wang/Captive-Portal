@@ -16,16 +16,18 @@ def customTree():
     s1 = net.addSwitch('s1')
     s2 = net.addSwitch('s2')
 
+    router='10.0.0.1'
+
     info('*** Adding host\n')
-    host = net.addHost('host', mac='00:00:00:00:00:01', ip='10.0.0.2')
+    host = net.addHost('host', mac='00:00:00:00:00:01', ip=router)
 
     info('*** Adding NAT connectivity\n')
     internet = net.addNAT(name='internet', mac='00:00:00:00:00:02')
     internet.configDefault()
 
-    info('*** Adding user\n')
-    h1 = net.addHost('h1', defaultRoute='via 10.0.0.2')
-    h2 = net.addHost('h2', defaultRoute='via 10.0.0.2')
+    info('*** Adding users\n')
+    h1 = net.addHost('h1', defaultRoute=f'via {router}')
+    h2 = net.addHost('h2', defaultRoute=f'via {router}')
 
     info('*** Creating links\n')
     net.addLink(s1, host)
@@ -34,16 +36,17 @@ def customTree():
     net.addLink(s2, h1)
     net.addLink(s2, h2)
 
-    # info('*** DNS\n')
-    # h1.cmd('cp -f resolv.conf /etc/')
-
     info('*** Starting network\n')
     net.start()
 
-    # info('*** DNS\n')
-    # h1.cmd('echo "nameserver 8.8.8.8" > /etc/resolv.conf')
-    # print(h1.cmd('cat /etc/resolv.conf'))
-    # print(h1.cmd('cat /etc/NetworkManager/NetworkManager.conf'))
+    info('*** Configure DNS for users\n')
+    h1.cmd('sudo systemctl disable --now systemd-resolved.service')
+    h2.cmd('sudo systemctl disable --now systemd-resolved.service')
+    h1.cmd(f'echo -e "nameserver 127.0.0.53\nnameserver {router}\nnameserver 8.8.8.8" > /etc/resolv.conf')
+    h2.cmd(f'echo -e "nameserver 127.0.0.53\nnameserver {router}\nnameserver 8.8.8.8" > /etc/resolv.conf')
+
+    info('*** Fixed internet IP\n')
+    internet.cmd(f'ifconfig internet-eth0 {router} netmask 255.0.0.0')
 
     info('*** Running CLI\n')
     CLI(net)
