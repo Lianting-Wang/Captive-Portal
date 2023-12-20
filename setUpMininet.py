@@ -53,8 +53,8 @@ def customTree():
     configure_network(h1, router)
     configure_network(h2, router)
 
-    info('*** Start host service\n')
-    host.cmd('python3 dns_server.py &')
+    # info('*** Start host service\n')
+    # host.cmd('python3 dns_server.py &')
     # host.cmd('python3 web_server.py &')
 
     info('*** Running CLI\n')
