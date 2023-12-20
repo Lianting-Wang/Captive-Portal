@@ -3,12 +3,20 @@ from mininet.node import RemoteController, OVSSwitch, Node
 from mininet.cli import CLI
 from mininet.log import setLogLevel, info
 from mininet.link import Intf
+import configparser
 
-def configure_network(host, router):
+config = configparser.ConfigParser()
+config.read('config.ini')
+captive_portal_ip = config['DEFAULT']['captive_portal_ip']
+captive_portal_mac = config['DEFAULT']['captive_portal_mac']
+internet_ip = config['DEFAULT']['internet_ip']
+internet_mac = config['DEFAULT']['internet_mac']
+
+def configure_network(host):
     host.cmd('sudo systemctl disable --now systemd-resolved.service')
-    host.cmd(f'echo -e "nameserver 127.0.0.53\nnameserver {router}\nnameserver 8.8.8.8" > /etc/resolv.conf')
-    host.cmd('sudo ip route add 0.0.0.0/0 via 10.0.0.2 metric 100')
-    host.cmd('sudo ip route add 0.0.0.0/0 via 10.0.0.1 metric 200')
+    host.cmd(f'echo -e "nameserver 127.0.0.53\nnameserver {captive_portal_ip}\nnameserver 8.8.8.8" > /etc/resolv.conf')
+    host.cmd(f'sudo ip route add 0.0.0.0/0 via {internet_ip} metric 100')
+    host.cmd(f'sudo ip route add 0.0.0.0/0 via {captive_portal_ip} metric 200')
     host.cmd('export XAUTHORITY=/root/.Xauthority')
 
 def customTree():
@@ -23,13 +31,11 @@ def customTree():
     s1 = net.addSwitch('s1')
     s2 = net.addSwitch('s2')
 
-    router='10.0.0.1'
-
     info('*** Adding host\n')
-    host = net.addHost('host', mac='00:00:00:00:00:01', ip=router)
+    host = net.addHost('host', mac=captive_portal_mac, ip=captive_portal_ip)
 
     info('*** Adding internet connectivity\n')
-    internet = net.addNAT(name='internet', mac='00:00:00:00:00:02')
+    internet = net.addNAT(name='internet', mac=internet_mac)
     internet.configDefault()
 
     info('*** Adding users\n')
@@ -47,11 +53,11 @@ def customTree():
     net.start()
 
     info('*** Configure NAT setting\n')
-    internet.cmd(f'ifconfig internet-eth0 10.0.0.2 netmask 255.0.0.0')
+    internet.cmd(f'ifconfig internet-eth0 {internet_ip} netmask 255.0.0.0')
 
     info('*** Configure user network\n')
-    configure_network(h1, router)
-    configure_network(h2, router)
+    configure_network(h1)
+    configure_network(h2)
 
     # info('*** Start host service\n')
     # host.cmd('python3 dns_server.py &')

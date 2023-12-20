@@ -2,8 +2,13 @@ import sys
 import json
 import socket
 
+config = configparser.ConfigParser()
+config.read('config.ini')
+TCP_server_ip = config['DEFAULT']['TCP_server_ip']
+TCP_server_port = int(config['DEFAULT']['TCP_server_port'])
+
 class TCPClient:
-    def __init__(self, host='127.0.0.1', port=65432):
+    def __init__(self, host=TCP_server_ip, port=TCP_server_port):
         """Create a TCP client that can send and receive messages from a persistent connection."""
         self.host = host
         self.port = port

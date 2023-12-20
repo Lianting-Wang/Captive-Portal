@@ -5,6 +5,14 @@ import threading
 from datetime import datetime, timedelta
 import os
 import time
+import configparser
+
+config = configparser.ConfigParser()
+config.read('config.ini')
+TCP_server_ip = config['DEFAULT']['TCP_server_ip']
+TCP_server_port = int(config['DEFAULT']['TCP_server_port'])
+captive_portal_mac = config['DEFAULT']['captive_portal_mac']
+internet_mac = config['DEFAULT']['internet_mac']
 
 valid_time = timedelta(days=1)
 
@@ -34,7 +42,7 @@ class MACSet:
             return False
 
 class Server:
-    def __init__(self, hMAC='00:00:00:00:00:01', iMAC='00:00:00:00:00:02', host='127.0.0.1', port=65432):
+    def __init__(self, hMAC=captive_portal_mac, iMAC=internet_mac, host=TCP_server_ip, port=TCP_server_port):
         self.host = host
         self.port = port
         self.hMAC = hMAC
@@ -152,5 +160,5 @@ class Server:
             with open(file_name, "w") as file:
                 file.write("")
 
-server = Server('00:00:00:00:00:01')
+server = Server()
 server.run_server()

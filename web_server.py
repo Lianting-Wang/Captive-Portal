@@ -5,6 +5,18 @@ import socketserver
 from urllib.parse import parse_qs
 from http.server import HTTPServer, SimpleHTTPRequestHandler
 from scapy.all import ARP, Ether, srp
+import configparser
+
+config = configparser.ConfigParser()
+config.read('config.ini')
+ssl_enable = config['DEFAULT']['ssl_enable']
+keyfile = config['DEFAULT']['keyfile']
+certfile = config['DEFAULT']['certfile']
+captive_portal_host = config['DEFAULT']['captive_portal_host']
+
+protocol = 'http'
+if (ssl_enable == 'True'):
+    protocol = 'https'
 
 class RedirectHandler(SimpleHTTPRequestHandler):
     def get_mac(self, ip):
@@ -22,7 +34,7 @@ class RedirectHandler(SimpleHTTPRequestHandler):
     
     def redirect_handler(self, redirect_domain, host):
         self.send_response(302)
-        self.send_header('Location', f'https://{redirect_domain}/?original_host={host}')
+        self.send_header('Location', f'{protocol}://{redirect_domain}/?original_host={host}')
         self.end_headers()
     
     def request_handler(self):
@@ -57,7 +69,7 @@ class RedirectHandler(SimpleHTTPRequestHandler):
 
         # Define the target domain for the redirect
         # redirect_domain = 'captive-portal.com'
-        redirect_domain = 'captive-portal.wlt.life'
+        redirect_domain = captive_portal_host
 
         # If the request is for a different domain, redirect to the captive portal
         if host and host != redirect_domain:
@@ -118,10 +130,11 @@ def start_http_server():
 def start_https_server():
     httpsd = run(port=443)
     httpsd.socket = ssl.wrap_socket(httpsd.socket, 
-                                    keyfile="certificates/captive-portal.wlt.life.key", 
-                                    certfile='certificates/captive-portal.wlt.life.crt', 
+                                    keyfile=keyfile, 
+                                    certfile=certfile, 
                                     server_side=True)
     httpsd.serve_forever()
 
 threading.Thread(target=start_http_server).start()
-threading.Thread(target=start_https_server).start()
+if (ssl_enable == 'True'):
+    threading.Thread(target=start_https_server).start()
