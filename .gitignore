@@ -1,3 +1,6 @@
 .DS_Store
 comint
 __pycache__
+utils
+certificates/*
+macset
