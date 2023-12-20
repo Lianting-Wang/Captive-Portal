@@ -5,7 +5,6 @@ config = configparser.ConfigParser()
 config.read('config.ini')
 captive_portal_ip = config['DEFAULT']['captive_portal_ip']
 captive_portal_host = config['DEFAULT']['captive_portal_host']
-internet_ip = config['DEFAULT']['internet_ip']
 
 def dns_responder(packet):
     if packet.haslayer(DNSQR): # DNS question record
