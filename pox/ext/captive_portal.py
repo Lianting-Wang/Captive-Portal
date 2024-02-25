@@ -35,7 +35,7 @@ log = core.getLogger()
 _flood_delay = 0
 
 class TCPClient:
-  def __init__(self, host='127.0.0.1', port=65432):
+  def __init__(self, host='127.0.0.1', port=65431):
     """Create a TCP client that can send and receive messages from a persistent connection."""
     self.host = host
     self.port = port
@@ -226,12 +226,12 @@ class LearningSwitch (object):
           return
         # 6
         if packet.src == self.captive_portal_mac:
-          if self.check_valid(packet.dst):
+          if packet.dst != self.internet_mac and self.check_valid(packet.dst):
             drop()
           else:
             direct_to_port(packet, event, port)
         elif packet.src == self.internet_mac:
-          if not self.check_valid(packet.dst):
+          if packet.dst != self.captive_portal_mac and not self.check_valid(packet.dst):
             drop()
           else:
             direct_to_port(packet, event, port)

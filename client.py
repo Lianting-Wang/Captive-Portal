@@ -1,10 +1,11 @@
 import sys
 import json
 import socket
+import configparser
 
 config = configparser.ConfigParser()
 config.read('config.ini')
-TCP_server_ip = config['DEFAULT']['TCP_server_ip']
+TCP_server_ip = config['DEFAULT']['internet_ip']
 TCP_server_port = int(config['DEFAULT']['TCP_server_port'])
 
 class TCPClient:

@@ -1,5 +1,6 @@
 import ssl
 import json
+import atexit
 import threading
 import socketserver
 from urllib.parse import parse_qs
@@ -9,14 +10,47 @@ import configparser
 
 config = configparser.ConfigParser()
 config.read('config.ini')
+TCP_server_ip = config['DEFAULT']['internet_ip']
+TCP_server_port = int(config['DEFAULT']['TCP_server_port'])
 ssl_enable = config['DEFAULT']['ssl_enable']
 keyfile = config['DEFAULT']['keyfile']
 certfile = config['DEFAULT']['certfile']
 captive_portal_host = config['DEFAULT']['captive_portal_host']
 
+httpd = None
+httpsd = None
+
 protocol = 'http'
 if (ssl_enable == 'True'):
     protocol = 'https'
+
+class TCPClient:
+  def __init__(self, host=TCP_server_ip, port=TCP_server_port):
+    """Create a TCP client that can send and receive messages from a persistent connection."""
+    self.host = host
+    self.port = port
+    self.connection = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    self.connection.connect((host, port))
+
+  def send_request(self, request):
+    """Send a JSON request to the server and return the JSON response."""
+    self.connection.sendall(json.dumps(request).encode())
+    return json.loads(self.connection.recv(1024).decode())
+
+  def set_valid(self, value):
+    """Send valid MAC address to thr server."""
+    return self.send_request({'command': 'add', 'value': value})
+
+  def close_connection(self):
+    """Close the connection to the server."""
+    self.connection.close()
+
+# Initialize TCPClient instances globally
+global_tcp_client = TCPClient()
+
+# Close the TCP connection when the program exits
+def close_tcp_client():
+    global_tcp_client.close_connection()
 
 class RedirectHandler(SimpleHTTPRequestHandler):
     def get_mac(self, ip):
@@ -96,12 +130,16 @@ class RedirectHandler(SimpleHTTPRequestHandler):
                 return
 
             # Check credentials
+            response = {'success': False}
             if data.get('username') == 'test' and data.get('password') == 'pass':
-                response = {'success': True}
-                with open('macset', 'a') as file:
-                    file.write(mac_address)
-            else:
-                response = {'success': False}
+                try:
+                    data = global_tcp_client.set_valid(mac_address)
+                    if data['result']:
+                        response = {'success': True}
+                    else:
+                        response = {'success': False, 'error': 'MAC address not added correctly'}
+                except Exception as e:
+                    response = {'success': False, 'error': str(e)}
 
             # Send JSON response
             self.send_response(200)
@@ -123,17 +161,33 @@ def run(port):
 
 # Starting the HTTP server
 def start_http_server():
-    httpsd = run(port=80)
-    httpsd.serve_forever()
+    global httpd
+    httpd = run(port=80)
+    httpd.serve_forever()
 
 # Starting the HTTPS server
 def start_https_server():
+    global httpsd
     httpsd = run(port=443)
     httpsd.socket = ssl.wrap_socket(httpsd.socket, 
                                     keyfile=keyfile, 
                                     certfile=certfile, 
                                     server_side=True)
     httpsd.serve_forever()
+
+# Close the HTTP and HTTPS servers
+def close_servers():
+    print("Closing HTTP and HTTPS servers...")
+    if httpd:
+        httpd.shutdown()
+        httpd.server_close()
+    if httpsd:
+        httpsd.shutdown()
+        httpsd.server_close()
+
+# Register the close_servers function to be called when the program exits
+atexit.register(close_servers)
+atexit.register(close_tcp_client)
 
 threading.Thread(target=start_http_server).start()
 if (ssl_enable == 'True'):

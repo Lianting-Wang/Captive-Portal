@@ -1,10 +1,8 @@
 import json
+import atexit
 import socket
-import sys
 import threading
 from datetime import datetime, timedelta
-import os
-import time
 import configparser
 
 config = configparser.ConfigParser()
@@ -127,38 +125,10 @@ class Server:
 
     def stop_server(self):
         """Stops the TCP server."""
+        print("Stopping server...")
         if self.server_socket:
             self.server_socket.close()
 
-    def run_server(self):
-        """Runs a TCP server and file monitor in separate threads."""
-        server_thread = threading.Thread(target=self.run_tcp_server)
-        file_monitor_thread = threading.Thread(target=self.monitor_file, args=("macset",))
-
-        server_thread.start()
-        file_monitor_thread.start()
-
-        server_thread.join()
-        file_monitor_thread.join()
-
-    def monitor_file(self, file_name):
-        """Private method to monitor file for MAC addresses."""
-        while True:
-            if os.path.exists(file_name):
-                with open(file_name, "r") as file:
-                    if file.readline():
-                        self.read_and_delete_all_lines(file_name)
-            time.sleep(1)
-
-    def read_and_delete_all_lines(self, file_name):
-        """Private method to read and delete all lines from the file."""
-        with open(file_name, "r") as file:
-            lines = file.readlines()
-        if lines:
-            for line in lines:
-                self.MACSet.add_mac(line.strip())
-            with open(file_name, "w") as file:
-                file.write("")
-
 server = Server()
-server.run_server()
+server.run_tcp_server()
+atexit.register(server.stop_server())
