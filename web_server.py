@@ -154,7 +154,7 @@ class RedirectHandler(SimpleHTTPRequestHandler):
             self.wfile.write(response.encode('utf-8'))
 
 def run(port):
-    server_address = ('', port)
+    server_address = ('0.0.0.0', port)
     httpd = HTTPServer(server_address, RedirectHandler)
     print(f'Starting httpd server on port {port}')
     return httpd

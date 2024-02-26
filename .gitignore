@@ -4,3 +4,4 @@ __pycache__
 utils
 certificates/*
 macset
+gateway_switch.sh
